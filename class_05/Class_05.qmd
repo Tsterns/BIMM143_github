@@ -1,0 +1,129 @@
+---
+title: "Class 05: Data Visualization with GGPLOT"
+author: "Tessa Sterns PID: A18482353"
+format: pdf
+---
+This week on Bioinformatics! We are using **ggplot** package to make pretty pretty pictures with data. Woo!
+However this is not the only data visualization tool in R such as; "base" R, or ggplot2.
+
+"Base" R plot:
+
+```{r}
+head(cars)
+```
+Using the `plot()` function.
+```{r}
+plot(cars)
+```
+
+ > Key-point: base R is quick but dirty.
+ Behold the majesty that is **ggplot**
+ 
+ The package needs to be installed first with `install.packages()` function. **only in console not in lab reports.** One time only.
+ Secondly, the package needs to be loaded using the `linrary()` function. This is needed every time.
+ 
+```{r}
+library(ggplot2)
+ggplot(cars)
+```
+T-T 
+Every ggplot needs at least 3 layers, Data, aes(), and geom()
+
+```{r}
+ggplot(cars) +
+ aes(x = speed, y = dist) +
+  geom_point() 
+```
+
+```{r}
+hist(cars$speed)
+```
+> Key takeawa. For simple plots, base R is quicker more concise code. Good for initial exploratory data analysis. However, ggplot is easier to customize.
+
+The more layers, the more custome the graph.
+
+```{r}
+ggplot(cars) +
+ aes(x = speed, y = dist) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) + 
+  ## se = false removes error bar
+  labs(title = "Relation Between Speed and Stoping distance", x = "Speed (MpH)", y = "Stoping Distance (ft)") +
+  theme_minimal()
+## labs(title =, x= ,y=) for changing lables.
+```
+
+Reading gene expresion data from a url
+```{r}
+url <- "https://bioboot.github.io/bimm143_S20/class-material/up_down_expression.txt"
+genes <- read.delim(url)
+head(genes)
+nrow(genes)
+ncol(genes)
+sum(genes$State == "up")
+## another useful function for counting occurrences in a data set is the `table()` function.
+table(genes$State)
+```
+>Q1 how many genes are in this wee dataset?
+ 5,196
+ >Q2 How many upregulated genes are in this data set?
+ 127
+ 
+```{r}
+ggplot(genes) + 
+  aes(x = Condition1, 
+      y = Condition2,
+      colour = State) +
+  geom_point() +
+  theme_minimal() +
+  scale_color_manual(values = c("darkblue", "gray", "darkred")) +
+  labs(title = "Gene Expression Changes Upon Drug Treatment", 
+       y = "Control(-drug)",
+       x = "Treatment(+drug)")
+```
+ 
+ ## Even more plotting
+ 
+```{r}
+url2 <- "https://raw.githubusercontent.com/jennybc/gapminder/master/inst/extdata/gapminder.tsv"
+
+gapminder <- read.delim(url2)
+head(gapminder, 3)
+tail(gapminder, 3)
+tab <- table(gapminder$country)
+length(tab)
+length(table(gapminder$continent))
+## unique() will list unique entries
+```
+ > How many countries are in this dataset?
+ 142
+ >How many continents?
+ 5
+ 
+```{r}
+ggplot(gapminder) +
+  aes(x = gdpPercap,
+      y = lifeExp, 
+      col = continent) +
+  geom_point() + 
+  theme_minimal() +
+  labs(title = "Life Expectancty Compared to GDP")
+```
+ 
+```{r}
+library(ggrepel)
+ggplot(gapminder) +
+  aes(x = gdpPercap,
+      y = lifeExp, 
+      col = continent,
+      label = country) +
+  geom_point() + 
+  theme_minimal() +
+  geom_text_repel() +
+  labs(title = "Life Expectancty Compared to GDP") +
+  facet_wrap(~continent)
+```
+ 
+ Using the **ggreple** can make sensible lables.
+ ## Summary 
+Compared to base R ggplot is capable of making publication ready pretty graphics. The code builds upon layers so it is highly customizable. The layering of the code also allows it to be easily read by other coders.   
