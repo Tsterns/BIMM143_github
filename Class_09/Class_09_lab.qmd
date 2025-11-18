@@ -1,0 +1,257 @@
+---
+title: "Class_09_lab"
+author: "Tessa Sterns PID: A18482353"
+format: pdf
+toc: true
+---
+
+The PDB is the main databank for protein structures.
+
+```{r pdbstats, message=FALSE}
+library(readr)
+
+ps.data <- read_csv("Data Export Summary.csv")
+# if only using one function can write as 
+#'readr: :read_csv()`
+```
+
+```{r}
+sum(ps.data$Total)
+p.xray <- round((sum(ps.data$`X-ray`)/sum(ps.data$Total))*100, 2)
+p.EM <- round((sum(ps.data$EM)/sum(ps.data$Total))*100,2)
+
+Tot.p <- round((ps.data[1,9, drop = TRUE] / sum(ps.data$Total))*100,2)
+```
+
+>Q1: What percentage of structures in the PDB are solved by X-Ray and Electron Microscopy.
+
+There have been `r p.xray`% solved by X-ray and `r p.EM`% solved by electron microscopy.
+
+>Q2: What proportion of structures in the PDB are protein?
+
+There are `r Tot.p` % of the total data set are proteins. 
+
+>Q3: Type HIV in the PDB website search box on the home page and determine how many HIV-1 protease structures are in the current PDB?
+
+There are 1150 structures of the HIV-1 protease in the current PDB.
+
+## Exploring PDB structures
+
+package for structural bioinformatics - bio3d
+```{r}
+library(bio3d)
+
+hiv <- read.pdb(file = "1hsg")
+```
+Using Mol* veiwer to explore 1HSG structure.
+
+![](1HSG.png)
+
+> Q4: Water molecules normally have 3 atoms. Why do we see just one atom per water molecule in this structure?
+
+They are just showing the oxygen which is the larger and more electronegative atom in water. One reason for this is to make it easier to visualize. Similar to how we don't show all the molecules of water because if we did it would be difficult to see the protein.
+
+>Q5: There is a critical “conserved” water molecule in the binding site. Can you identify this water molecule? What residue number does this water molecule have
+
+This water molecule is HOH 308. It is participating in four hydrogen bonds, 2 with the ligand and 2 with the HIV-1 protease.
+
+>Q6: Generate and save a figure clearly showing the two distinct chains of HIV-protease along with the ligand. You might also consider showing the catalytic residues ASP 25 in each chain and the critical water (we recommend “Ball & Stick” for these side-chains). Add this figure to your Quarto document.
+
+A view of HIV-1 protease with catalytic residues in space filling model and the ligand MK1 as a ball and stick model.  
+
+![HIV-1 protease with catalytic D25 residues and catalytic H2O highlighted.](1HSG-D25-catH20.png)
+
+>Discussion Topic: Can you think of a way in which indinavir, or even larger ligands and substrates, could enter the binding site?
+
+Because proteins are dynamic it is likely that when not bound by a ligand the HIV-1 protease is in a more open configuration and then conforms to fit the ligind upon interaction.
+
+>Q7: [Optional] As you have hopefully observed HIV protease is a homodimer (i.e. it is composed of two identical chains). With the aid of the graphic display can you identify secondary structure elements that are likely to only form in the dimer rather than the monomer?
+
+There is an antiparalel beta-sheet that is formed by a beta-strand from each of the monomers. Additionally the binding pocket itself rests in the middle of the two chains.
+
+## PDB objects in R
+
+```{r}
+head(hiv$atom)
+```
+Extract the sequence
+```{r}
+pdbseq(hiv)
+```
+
+>Q7: How many amino acid residues are there in this pdb object? 
+
+There are `r sum(table(pdbseq(hiv)))` amino acid residues in this pdb object.
+
+```{r}
+library(dplyr)
+non.p <- hiv$atom %>% 
+  filter(resid == "MK1")
+table(non.p$resid)
+```
+
+>Q8: Name one of the two non-protein residues?
+
+One of the non-protein residues is `r non.p[1,5]` which is the ligind designed to inhibit the protease.
+
+>Q9: How many protein chains are in this structure? 
+
+There are two chains in this structure an alpha and a beta.
+
+Need the **bio3dview** package installed in the console first.
+
+```{r}
+library(bio3dview)
+
+view.pdb(hiv)
+
+hiv1.Aseq <- pdbseq(trim.pdb(hiv, chain="A"))
+```
+
+Changing some settings
+```{r}
+sel <- atom.select(hiv, resno=25)
+view.pdb(hiv,
+         highlight = sel,
+         highlight.style = "spacefill",
+         colorScheme = "chain",
+         col = c("blue", "orange"), 
+         backgroundColor = "lightpink")
+```
+
+## Predicting functional motions of a single structure
+
+```{r}
+adk <- read.pdb("6s36")
+
+#flexibility prediction
+m <- nma(adk)
+
+plot(m)
+```
+
+
+```{r}
+# Molecular trajectory animation
+mktrj(m, file="adk_m7.pdb")
+
+view.nma(m, pdb=adk)
+```
+
+## Comparative structure analysis of Adenylate Kinase
+
+>Q10. Which of the packages above is found only on BioConductor and not CRAN?
+
+The 'BiocManager::install("msa")' package is not on CRAN, the use of ': :' indecates we are downloading a package from an outside library, and Bioc is a shortened form of Biocunductor.
+
+> Q11. Which of the above packages is not found on BioConductor or CRAN?
+
+The 'pak::pak("bioboot/bio3dview")' package.
+
+>Q12. True or False? Functions from the pak package can be used to install packages from GitHub and BitBucket?
+
+True
+
+##Search and retrieve ADK structures
+
+```{r}
+aa <- get.seq("1ake_A")
+
+aa
+```
+>Q13. How many amino acids are in this sequence, i.e. how long is this sequence?
+
+There are `r ncol(aa$ali)` amino acids in this sequence.
+
+```{r}
+# Blast or hmmer search 
+b <- blast.pdb(aa)
+```
+```{r}
+hits <- plot(b)
+```
+```{r}
+head(hits$pdb.id)
+```
+```{r}
+# Download releated PDB files
+files <- get.pdb(hits$pdb.id, path="pdbs", split=TRUE, gzip=TRUE)
+
+```
+##Align and superpose structures
+
+```{r}
+pdbs <- pdbaln(files, fit = TRUE, exefile="msa")
+```
+```{r}
+# Vector containing PDB codes for figure axis
+ids <- basename.pdb(pdbs$id)
+
+# Draw schematic alignment
+# Kept getting an error that the figure margins were too large, every time i tried to knit the document. Tried several fixes from AI tools to change the margin size and none of them worked.
+ 
+```
+
+## Annotate collected PDB structures
+
+```{r}
+anno <- pdb.annotate(ids)
+unique(anno$source)
+
+```
+## Principal component analysis
+
+```{r}
+pc.xray <- pca(pdbs)
+plot(pc.xray)
+
+```
+
+```{r}
+# Calculate RMSD
+rd <- rmsd(pdbs)
+
+# Structure-based clustering
+hc.rd <- hclust(dist(rd))
+grps.rd <- cutree(hc.rd, k=3)
+
+plot(pc.xray, 1:2, col="grey50", bg=grps.rd, pch=21, cex=1)
+```
+
+## Optional further visualization
+
+```{r}
+# Visualize first principal component
+pc1 <- mktrj(pc.xray, pc=1, file="pc_1.pdb")
+view.pca(pc.xray)
+```
+
+PCA visualization with ggplot
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+df <- data.frame(PC1=pc.xray$z[,1], 
+                 PC2=pc.xray$z[,2], 
+                 col=as.factor(grps.rd),
+                 ids=ids)
+
+p <- ggplot(df) + 
+  aes(PC1, PC2, col=col, label=ids) +
+  geom_point(size=2) +
+  geom_text_repel(max.overlaps = 20) +
+  theme(legend.position = "none")
+p
+```
+
+## Normal mode analysis 
+
+```{r}
+modes <- nma(pdbs)
+plot(modes, pdbs, col=grps.rd)
+```
+
+>Q14. What do you note about this plot? Are the black and colored lines similar or different? Where do you think they differ most and why?
+
+The lines are mostly similar except for a few key regions. I think this is due to the regions in which the protein undergoes a conformational change when in the pressence of a ligand.

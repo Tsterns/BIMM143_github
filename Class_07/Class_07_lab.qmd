@@ -1,0 +1,214 @@
+---
+title: "Class_07_lab"
+author: "Tessa Sterns PID: 18482353"
+format: pdf
+---
+
+An introductory exploration of machine learning. Starting with clustering and dimensionality reduction.
+
+## k-means clustering
+Using generated data from the `rnorm()` function with known clustering we can explore how the clustering works.
+
+```{r}
+rnorm(20, 5, 2)
+hist(rnorm(45, 6, 0.5))
+
+```
+```{r}
+x <- c(rnorm(30, -3),
+rnorm(30, 3))
+
+y <- rev(x)
+
+z <- cbind(x,y)
+
+plot(z)
+```
+In base R the function `kmeans()` can do k-means clustering.
+
+```{r}
+km <- kmeans(z, 2)
+```
+To retreive the results from a returned list object use the `$` syntax
+
+> Q1 How many points are in each cluster?
+
+```{r}
+km$size
+```
+
+> Q2 What is the cluster asignment?
+
+```{r}
+km$cluster
+```
+
+> Q3 Where are the cluster centers?
+
+```{r}
+km$centers
+```
+
+> Q4 Make a clustering results figure of the data colored by cluster mebership and show cluster centers?
+
+```{r}
+plot(z, col = km$cluster, pch = 16)
+points(km$centers, col="blue", pch = 15, cex = 2)
+```
+k-means clustering is popular, very fast and strait forward to use, taking numeric data as input and returns cluster membership vector. However you need to already know how many clusters exist in the data set. 
+
+> Q5 Run k-means again with four groups and plot results?
+
+```{r}
+km4 <- kmeans(z, 4)
+plot(z, col = km4$cluster, pch = 16)
+points(km4$centers, col="purple", pch = 15, cex = 1.5)
+```
+generating a Scree plot
+brute-force method
+```{r}
+km3 <- kmeans(z, 3)
+km5 <- kmeans(z, 5)
+km1 <- kmeans(z, 1)
+
+SStw <- c(km1$tot.withinss, km$tot.withinss, km3$tot.withinss, km4$tot.withinss, km5$tot.withinss)
+k <- c(1,2,3,4,5)
+plot(k, SStw, type = "b")
+```
+`for` loop to generate a Scree plot, more elegant code for when brute force is unreasonable.
+```{r}
+n <- NULL
+for(i in 1:5) {
+  n <- c(n, kmeans(z, centers = i)$tot.withinss)
+}
+plot(n, type = "b")
+```
+
+## Hierarchical Clustering
+
+The main "base" function is `hclust()`. Here we can't imput raw data, need to generate a distance matrix using `dist()` function.
+
+```{r}
+d <- dist(z)
+hc <- hclust(d)
+hc
+```
+
+There is a plot method for hclust which will return a dendrogram. 
+
+```{r}
+plot(hc)
+abline(h=8, col = "red")
+```
+To retrieve our cluster membership vecter we can use `cutree` at a given hieght 'h =' or groups 'k ='.
+```{r}
+grps <- cutree(hc, h = 8)
+```
+
+> Q6 Plot the data with our hclust result coloring.
+
+```{r}
+plot(z, col = grps)
+```
+
+## Dimensionality reduction, (PCA) Principal Component Analysis
+
+Principle components are new axis that are closest to the observations. The can capture more of the spread of the data. Usefull for identifying outliers and trends in the data. 
+
+# Part 2 PCA
+
+## PCA of UK food data
+
+```{r}
+url <- "https://tinyurl.com/UK-foods"
+x <- read.csv(url)
+```
+
+> Q1 How many rows and colums are in this data set?
+
+```{r}
+dim(x)
+```
+
+```{r}
+head(x)
+
+rownames(x) <- x[,1]
+x <- x[,-1]
+head(x)
+# an easier way is to read in the row names in the first place, x <- read.csv(url, row.names=1)
+head(x)
+```
+```{r}
+dim(x)
+```
+> Q2. Which approach to solving the ‘row-names problem’ mentioned above do you prefer and why? Is one approach more robust than another under certain circumstances? 
+
+reading in the code properly the first time makes it so we don't accidentally remove extra collums. 
+
+```{r}
+barplot(as.matrix(x), beside=T, col=rainbow(nrow(x)))
+```
+> Q3: Changing what optional argument in the above barplot() function results in the following plot?
+
+beside = F
+
+```{r}
+barplot(as.matrix(x),  col=rainbow(nrow(x)))
+```
+> Q5: Generating all pairwise plots may help somewhat. Can you make sense of the following code and resulting figure? What does it mean if a given point lies on the diagonal for a given plot?
+
+```{r}
+pairs(x, col=rainbow(10), pch=16)
+```
+
+This code can generate all columns against each other. If they are on the diagonal then the countries eat the same amount of a given food.
+
+> Key takeaway: It is rather difficult to  spot the major trends and patterns even in relativly small datasets. This would be absolutly useless with large datasets. 
+
+## PCA to save the day
+
+The main function in "base" R for PCA is `prcomp()`.
+Transpose `t()` of the data set, rows become columns and columns become rows.
+
+```{r}
+pca <- prcomp( t(x) )
+summary(pca)
+```
+ Base R plot
+ 
+```{r}
+cols <- c("purple", "darkred", "lightblue", "darkgreen")
+plot(pca$x[,1], pca$x[,2], col = cols, pch =16)
+```
+ This shows that N.Ireland is different than the other groups.
+ 
+ However we can make a better graph
+ 
+```{r}
+library(ggplot2)
+```
+ 
+```{r}
+ggplot(pca$x) +
+  aes(PC1, PC2) +
+  geom_point(col = cols)
+```
+
+Finding out the specific foods that are contributes to the PC axis.
+
+```{r}
+pca$rotation
+```
+
+```{r}
+ggplot(pca$rotation) +
+  aes(PC1, rownames(pca$rotation)) +
+  geom_col()
+```
+
+PCA can be a useful tool to visualize differences in large data sets.
+
+> Q6. What is the main differences between N. Ireland and the other countries of the UK in terms of this data-set?
+
+N. Ireland consumes more potatos, soft drinks and less fresh fruit, meat, alcohol than the rest of the UK.
