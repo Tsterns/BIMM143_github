@@ -1,0 +1,184 @@
+---
+title: "class_11_lab"
+author: "Tessa Sterns PID: A18482353"
+format: pdf
+toc: true
+---
+
+## AlphaFold Data Base (AFDB)
+
+The EBI maintains the largest database of AlphaFold predicted sequences. While the PDB contains 243910 experimentally solved structures, as of Oct 28 2025. Yet the total number of sequences in UniprotKB is 199579901. Meaning we only know the structure of ~0.12% of known proteins. 
+
+>Because of the time and cost of experimentally determining structure and therfore function. AI learning models like AlphaFold can help up reduce this gap in knowledge.
+
+The two quality scores in AlphaFold are for residues called **pLDDT** scores and the predicted alignment error **PAE** which scores the relative position between two residues. 
+
+## Generating Structure Predictions
+
+```{r}
+library(bio3d)
+```
+
+Figure of 5 predicted structures
+
+![](5predicted_alignments.png)
+
+![](Prediction1-5_align.png)
+
+
+# Custom analysis of resulting models in R
+
+Reading key results into R
+
+```{r}
+results.dir <- "HIVprDimer_Lab11_23119/"
+
+# File names for all PDB models
+pdb_files <- list.files(path=results.dir,
+                        pattern="*.pdb",
+                        full.names = TRUE)
+
+# Print our PDB file names
+basename(pdb_files)
+```
+
+```{r}
+m1 <- read.pdb(pdb_files[1])
+m1
+```
+
+```{r}
+pdbs <- pdbaln(pdb_files, fit=TRUE, exefile="msa")
+
+rd <- rmsd(pdbs, fit=T)
+
+range(rd)
+```
+```{r}
+library(pheatmap)
+
+colnames(rd) <- paste0("m",1:5)
+rownames(rd) <- paste0("m",1:5)
+pheatmap(rd)
+```
+
+
+```{r}
+plot.bio3d(m1$atom$b[m1$calpha], typ = "l")
+```
+
+
+## Residue conservation from alignment file
+
+```{r}
+aln_file <- list.files(path=results.dir,
+                       pattern=".a3m$",
+                        full.names = TRUE)
+aln_file
+```
+
+```{r}
+aln <- read.fasta(aln_file[1], to.upper = TRUE)
+```
+```{r}
+dim(aln$ali)
+```
+```{r}
+sim <- conserv(aln)
+
+plotb3(sim[1:99], sse=trim.pdb(m1, chain="A"),
+       ylab="Conservation Score")
+```
+
+```{r}
+con <- consensus(aln, cutoff = 0.9)
+con$seq
+```
+```{r}
+pdb <- read.pdb("1hsg")
+core <- core.find(pdbs)
+
+core.inds <- print(core, vol=0.5)
+
+xyz <- pdbfit(pdbs, core.inds, outpath="corefit_structures")
+
+rf <- rmsf(xyz)
+
+plotb3(rf, sse=pdb)
+abline(v=100, col="gray", ylab="RMSF")
+```
+
+## Predicted Alignment Error for domains
+
+```{r}
+library(jsonlite)
+
+# Listing of all PAE JSON files
+pae_files <- list.files(path=results.dir,
+                        pattern=".*model.*\\.json",
+                        full.names = TRUE)
+
+pae1 <- read_json(pae_files[1],simplifyVector = TRUE)
+pae5 <- read_json(pae_files[5],simplifyVector = TRUE)
+pae2 <- read_json(pae_files[2],simplifyVector = TRUE)
+attributes(pae1)
+```
+
+```{r}
+head(pae1$plddt) 
+```
+```{r}
+pae2$max_pae
+```
+Note, max pae is used for scoring an alignment. The lower the score the better the alignment.
+
+```{r}
+plot.dmat(pae1$pae, 
+          xlab="Residue Position (i)",
+          ylab="Residue Position (j)")
+```
+
+```{r}
+plot.dmat(pae5$pae, 
+          xlab="Residue Position (i)",
+          ylab="Residue Position (j)",
+          grid.col = "black",
+          zlim=c(0,30))
+```
+To get both models with the same z range allows for better interpetation.
+```{r}
+plot.dmat(pae1$pae, 
+          xlab="Residue Position (i)",
+          ylab="Residue Position (j)",
+          grid.col = "black",
+          zlim=c(0,30))
+```
+##Residue conservation from alignment file
+
+```{r}
+aln_file <- list.files(path=results.dir,
+                       pattern=".a3m$",
+                        full.names = TRUE)
+aln_file
+```
+```{r}
+aln <- read.fasta(aln_file[1], to.upper = TRUE)
+```
+```{r}
+dim(aln$ali)
+```
+Scoring residue conservation with the *conserve* function
+```{r}
+sim <- conserv(aln)
+
+plotb3(sim[1:99], sse=trim.pdb(pdb, chain="A"),
+       ylab="Conservation Score")
+```
+Visualization of functionally important sites
+```{r}
+m1.pdb <- read.pdb(pdb_files[1])
+occ <- vec2resno(c(sim[1:99], sim[1:99]), m1.pdb$atom$resno)
+write.pdb(m1.pdb, o=occ, file="m1_conserv.pdb")
+```
+
+![](Functional_regions.png)

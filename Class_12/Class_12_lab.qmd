@@ -1,0 +1,366 @@
+---
+title: "Class_12_Lab"
+author: "Tessa Sterns PID: A18482353"
+format: pdf
+toc: true
+---
+
+```{r}
+library(BiocManager)
+library(DESeq2)
+```
+## Import countData and colData
+
+```{r}
+counts <- read.csv("airway_scaledcounts.csv", row.names=1)
+metadata <-  read.csv("airway_metadata.csv")
+
+head(counts)
+```
+```{r}
+head(metadata)
+```
+ >Q1. How many genes are in this dataset? 
+ 
+ There are `r nrow(counts)` genes in this dataset.
+ 
+ >Q2. How many ‘control’ cell lines do we have?
+ 
+There are `r sum(metadata$dex == "control")` control cell lines. 
+
+## Toy differential gene expression
+
+```{r}
+library(dplyr)
+control <- metadata %>% filter(dex=="control")
+control.counts <- counts %>% select(control$id) 
+control.mean <- rowSums(control.counts)/4
+head(control.mean)
+```
+>Q3. How would you make the above code in either approach more robust? Is there a function that could help here?
+
+In the third line of code instead of dividing by 4 we could divide by *nrow(control.count)* which would make the code capable of functioning on any sized datatable.
+
+>Q4. Follow the same procedure for the treated samples (i.e. calculate the mean per gene across drug treated samples and assign to a labeled vector called treated.mean)
+
+```{r}
+library(dplyr)
+treated <- metadata %>% filter(dex=="treated")
+treated.counts <- counts %>% select(treated$id) 
+treated.mean <- rowSums(treated.counts)/4
+head(treated.mean)
+```
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+
+colSums(meancounts)
+```
+
+>Q5 (a). Create a scatter plot showing the mean of the treated samples against the mean of the control samples. 
+
+```{r}
+plot(meancounts$control.mean, meancounts$treated.mean)
+```
+
+
+>Q5 (b).You could also use the ggplot2 package to make this figure producing the plot below. What geom_?() function would you use for this plot?
+
+```{r}
+library(ggplot2)
+ggplot(meancounts) + 
+  aes(x = control.mean, y = treated.mean) +
+  geom_point()
+```
+
+>Q6. Try plotting both axes on a log scale. What is the argument to plot() that allows you to do this?
+
+```{r}
+library(ggplot2)
+ggplot(meancounts) + 
+  aes(x = control.mean, y = treated.mean) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+```{r}
+meancounts$log2fc <- log2(meancounts[,"treated.mean"]/meancounts[,"control.mean"])
+head(meancounts)
+```
+```{r}
+zero.vals <- which(meancounts[,1:2]==0, arr.ind=TRUE)
+
+to.rm <- unique(zero.vals[,1])
+mycounts <- meancounts[-to.rm,]
+head(mycounts)
+```
+>Q7. What is the purpose of the arr.ind argument in the which() function call above? Why would we then take the first column of the output and need to call the unique() function?
+
+The arr.ind=TRUE removes any of the points with a zero value that were causing the errors when attempting to convert the data to a log10 scale. The unique function ensures that there are no repeats in the new dataframe.
+
+log2 is commonly used for up/down regulation metrics.
+```{r}
+up.ind <- mycounts$log2fc > 2
+down.ind <- mycounts$log2fc < (-2)
+```
+
+>Q8. Using the up.ind vector above can you determine how many up regulated genes we have at the greater than 2 fc level?
+
+There are `r sum(up.ind)` up regulated genes.
+
+>Q9. Using the down.ind vector above can you determine how many down regulated genes we have at the greater than 2 fc level?
+
+There are `r sum(down.ind)` down regulated genes.
+
+>Q10. Do you trust these results? Why or why not?
+
+Because the results are based on a fold change they might be misleading. It is possible for there to be a fold change that doesn't effect the activity of the protein.  
+
+##Setting up for DESeq
+
+```{r}
+library(DESeq2)
+citation("DESeq2")
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts, 
+                              colData=metadata, 
+                              design=~dex)
+dds
+```
+
+## Principal Component Analysis (PCA)
+
+```{r}
+vsd <- vst(dds, blind = FALSE)
+plotPCA(vsd, intgroup = c("dex"))
+```
+
+```{r}
+pcaData <- plotPCA(vsd, intgroup=c("dex"), returnData=TRUE)
+head(pcaData)
+```
+```{r}
+# Calculate percent variance per PC for the plot axis labels
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+ggplot(pcaData) +
+  aes(x = PC1, y = PC2, color = dex) +
+  geom_point(size =3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  theme_bw()
+```
+
+## DESeq analysis
+
+```{r}
+dds <- DESeq(dds)
+```
+```{r}
+res <- results(dds)
+res
+```
+```{r}
+View(as.data.frame(res))
+```
+Those with a base mean of zero are not represented with a fold change or p-value.
+
+```{r}
+summary(res)
+```
+Base the alpha is set to 0.01 for most biological stats alpha is typically set to 0.05.
+
+```{r}
+res05 <- results(dds, alpha=0.05)
+summary(res05)
+```
+
+## Adding annotation data
+
+```{r}
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+```
+```{r}
+res$symbol <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res), 
+                     # Our genenames
+                     keytype="ENSEMBL",       
+                     # The format of our genenames
+                     column="SYMBOL",         
+                     # The new format we want to add
+                     multiVals="first")
+
+head(res)
+```
+
+>Q11. Run the mapIds() function two more times to add the Entrez ID and UniProt accession and GENENAME as new columns called res$entrez, res$uniprot and res$genename.
+
+```{r}
+res$entrez <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res),
+                     column="ENTREZID",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+
+res$uniprot <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res),
+                     column="UNIPROT",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+
+res$genename <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res),
+                     column="GENENAME",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+
+head(res)
+```
+Arranging by p-value
+```{r}
+ord <- order( res$padj )
+#View(res[ord,])
+head(res[ord,])
+```
+```{r}
+write.csv(res[ord,], "deseq_results.csv")
+```
+
+##Data Visualization
+
+Volcano Plots
+```{r}
+plot( res$log2FoldChange,  -log(res$padj), 
+      xlab="Log2(FoldChange)",
+      ylab="-Log(P-value)")
+```
+Adding lines that indicate where a p-value of 0.05 is and where the fold change is 2.
+```{r}
+plot( res$log2FoldChange,  -log(res$padj), 
+ ylab="-Log(P-value)", xlab="Log2(FoldChange)")
+
+# Add some cut-off lines
+abline(v=c(-2,2), col="darkred", lty=2)
+abline(h=-log(0.05), col="darkred", lty=2)
+```
+```{r}
+# Setup our custom point color vector 
+mycols <- rep("darkgrey", nrow(res))
+mycols[ abs(res$log2FoldChange) > 2 ]  <- "darkred" 
+
+inds <- (res$padj < 0.01) & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "darkblue"
+
+# Volcano plot with custom colors 
+plot( res$log2FoldChange,  -log(res$padj), 
+ col=mycols, ylab="-Log(P-value)", xlab="Log2(FoldChange)" )
+
+# Cut-off lines
+abline(v=c(-2,2), col="black", lty=2)
+abline(h=-log(0.1), col="black", lty=2)
+```
+
+Enhanced Volcano
+```{r}
+library(EnhancedVolcano)
+
+x <- as.data.frame(res)
+
+EnhancedVolcano(x,
+    lab = x$symbol,
+    x = 'log2FoldChange',
+    y = 'pvalue')
+```
+
+## add gene annotation
+
+To make the results more approachable we can add more annotation and change the ensemble code to gene names.
+
+Two biocunductor packages can be used to map IDs
+
+```{r}
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+What is in 'org.Hs.eg.db'?
+```{r}
+columns(org.Hs.eg.db)
+```
+This allows us to translate, "map", between different gene codes using `mapIds()`.
+
+```{r}
+res$symbol <- mapIds(keys = row.names(res), #current IDs
+       keytype = "ENSEMBL", #current format
+       x = org.Hs.eg.db, # where to get new mappings
+       column = "SYMBOL") # new format
+
+head(res)
+```
+Add mappings for "GENENAME" and "ENTREZID"
+
+```{r}
+res$genename <- mapIds(keys = row.names(res), 
+       keytype = "ENSEMBL", 
+       x = org.Hs.eg.db, 
+       column = "GENENAME") 
+
+res$entrezId <- mapIds(keys = row.names(res), 
+       keytype = "ENSEMBL", 
+       x = org.Hs.eg.db, 
+       column = "ENTREZID") 
+
+head(res)
+```
+
+## Pathway analysis
+
+More Biocunductor packages are needed, many exist with similar mechanisms depending on the questions asked.
+
+```{r, message=FALSE}
+library(gage)
+library(gageData)
+library(pathview)
+```
+
+To use **gage** need two things
+ - a named vector of DEGs(our geneset of interest)
+ for this set we will use fold-change values
+ - a set of pathways or genesets to use for annotation.
+ 
+```{r}
+foldC <- res$log2FoldChange
+names(foldC) <- res$entrezId
+head(foldC)
+```
+ 
+```{r}
+data("kegg.sets.hs")
+
+keggres = gage(foldC, gsets=kegg.sets.hs)
+
+attributes(keggres)
+```
+```{r}
+head(keggres$less, 5)
+```
+ looking at a pathway
+ 
+```{r}
+pathview(pathway.id = "hsa05310", gene.data = foldC)
+```
+ 
+![](hsa05310.pathview.png)
+
+saving main results
+```{r}
+write.csv(res, file = "myresults_annotated.csv")
+```
+
+ 

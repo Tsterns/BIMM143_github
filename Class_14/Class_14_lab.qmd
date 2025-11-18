@@ -1,0 +1,209 @@
+---
+title: "Class_14_lab"
+author: "Tessa Sterns PID: A18482353"
+format: pdf
+toc: true
+---
+Pathway Analysis from RNA-Seq Results
+## Background
+Working through a complete RNASeq analysis project. The input data is coming from a KO experiment of a HOX gene.
+
+## Data Import
+
+>Q. Complete the code below to remove the troublesome first column from countData
+
+```{r}
+library(DESeq2)
+
+countData <- read.csv("GSE37704_featurecounts.csv", row.names = 1)
+
+metaData <- read.csv("GSE37704_metadata.csv", row.names = 1)
+
+head(countData)
+```
+Need the rows of metaData to match exactly to columns of countData. countData has a lenght column that is extra.
+```{r}
+PrettyCount <-  countData[,-1]
+```
+
+## Removing Zero Count genes
+
+>Q. Complete the code below to filter countData to exclude genes (i.e. rows) where we have 0 read count across all samples (i.e. columns).
+
+```{r}
+to.keep.inds <- rowSums(PrettyCount) > 0
+nonzero_counts <- PrettyCount[to.keep.inds,]
+
+```
+
+
+## DESeq analysis
+
+```{r, message=FALSE}
+dds = DESeqDataSetFromMatrix(countData=nonzero_counts,
+                             colData=metaData,
+                             design=~condition)
+dds = DESeq(dds)
+
+dds
+```
+```{r}
+res = results(dds, contrast=c("condition", "hoxa1_kd", "control_sirna"))
+```
+
+>Q. Call the summary() function on your results to get a sense of how many genes are up or down-regulated at the default 0.1 p-value cutoff.
+
+```{r}
+summary(res)
+```
+
+## Data visualization
+
+```{r}
+library(ggplot2)
+ggplot(res) +
+  aes(log2FoldChange, -log(padj)) +
+  geom_point()
+
+```
+
+>Q. Improve this plot by completing the below code, which adds color and axis labels
+
+```{r}
+mycols <- rep("darkgrey", nrow(res))
+mycols[ abs(res$log2FoldChange) > 2 ]  <- "darkred" 
+
+inds <- (res$padj < 0.01) & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "darkblue"
+
+ggplot(res) +
+  aes(log2FoldChange, -log(padj)) +
+  geom_point(col=mycols) +
+ labs(y="-Log(P-value)", x="Log2(FoldChange)") +
+ geom_vline(xintercept = c(-2, 2), colour = "black", linetype = "dashed") +
+    geom_hline(yintercept = -log(0.1), colour = "black", linetype = "dashed")
+
+
+```
+
+## Add Annotation
+
+>Q. Use the mapIDs() function multiple times to add SYMBOL, ENTREZID and GENENAME annotation to our results by completing the code below.
+
+```{r}
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+
+res$symbol = mapIds(keys=row.names(res), 
+                    keytype="ENSEMBL",
+                    x = org.Hs.eg.db,
+                    column = "SYMBOL",
+                    multiVals="first")
+
+res$entrez = mapIds(org.Hs.eg.db,
+                    keys=row.names(res),
+                    keytype="ENSEMBL",
+                    column="ENTREZID",
+                    multiVals="first")
+
+res$name =   mapIds(org.Hs.eg.db,
+                    keys=row.names(res),
+                    keytype="ENSEMBL",
+                    column="GENENAME",
+                    multiVals="first")
+
+head(res, 10)
+```
+
+>Q. Finally for this section let's reorder these results by adjusted p-value and save them to a CSV file in your current project directory.
+
+```{r}
+res = res[order(res$pvalue),]
+write.csv(res, file = "deseq_results.csv")
+```
+
+## Pathway Analysis with KEGG
+```{r, message=FALSE}
+library(gage)
+library(gageData)
+library(pathview)
+```
+
+```{r}
+foldC <- res$log2FoldChange
+names(foldC) <- res$entrez
+head(foldC)
+```
+```{r}
+data("kegg.sets.hs")
+
+keggres = gage(foldC, gsets=kegg.sets.hs)
+
+attributes(keggres)
+```
+>Q. Can you do the same procedure as above to plot the pathview figures for the top 5 down-reguled pathways?
+
+```{r}
+head(keggres$less, 5)
+```
+
+```{r}
+pathview(pathway.id = "hsa04110", gene.data = foldC)
+```
+![](hsa04110.pathview.png)
+
+```{r}
+pathview(pathway.id = "hsa03030", gene.data = foldC)
+```
+![](hsa03030.pathview.png)
+```{r}
+pathview(pathway.id = "hsa05130", gene.data = foldC)
+```
+![](hsa05130.pathview.png)
+```{r}
+pathview(pathway.id = "hsa03013", gene.data = foldC)
+```
+![](hsa03013.pathview.png)
+
+```{r}
+pathview(pathway.id = "hsa03440", gene.data = foldC)
+```
+![](hsa03440.pathview.png)
+## Pathway analysis with GO 
+
+Same analysis but using GO genesets
+```{r}
+data(go.sets.hs)
+data(go.subs.hs)
+
+# Focus on Biological Process subset of GO
+gobpsets = go.sets.hs[go.subs.hs$BP]
+
+gobpres = gage(foldC, gsets=gobpsets, same.dir=TRUE)
+
+lapply(gobpres, head)
+```
+
+>Q: What pathway has the most significant “Entities p-value”? Do the most significant pathways listed match your previous KEGG results? What factors could cause differences between the two methods?
+
+Homophilic cell adhesion has the largest p-value using the GO database whereas in KEGG it was cell cycle. The main reason why there is a difference is because the two databases are using different reference data.
+
+## Reactome
+Available as a web interface <https://reactome.org/>, but also can be loading into R.
+
+The website wants a text file with one gene symbol per line. 
+```{r}
+sig_genes <- res[res$padj <= 0.05 & !is.na(res$padj), "symbol"]
+head(sig_genes)
+
+write.table(sig_genes, file="significant_genes.txt", row.names=FALSE, col.names=FALSE, quote=FALSE)
+```
+
+
+## Saving our Results
+```{r}
+write.csv(res, file = "myresults.csv")
+```
+
