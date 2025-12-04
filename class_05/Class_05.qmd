@@ -1,7 +1,7 @@
 ---
 title: "Class 05: Data Visualization with GGPLOT"
 author: "Tessa Sterns PID: A18482353"
-format: pdf
+format: gfm
 ---
 This week on Bioinformatics! We are using **ggplot** package to make pretty pretty pictures with data. Woo!
 However this is not the only data visualization tool in R such as; "base" R, or ggplot2.
