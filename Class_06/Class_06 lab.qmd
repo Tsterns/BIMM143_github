@@ -1,7 +1,7 @@
 ---
 title: "R Functions Lab Class_06"
 author: "Tessa Sterns PID:18482353"
-format: pdf
+format: gfm
 ---
 
 Every function in R contain at least 3 things:
