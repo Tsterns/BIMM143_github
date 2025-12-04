@@ -1,0 +1,41 @@
+---
+title: "Class_17_Hw"
+author: "Tessa Sterns PID:A18482353"
+format: pdf
+---
+
+```{r}
+my_data <- read.table("asthma_results.txt")
+
+library(ggplot2)
+
+summary(my_data)
+```
+
+```{r}
+library(dplyr)
+
+AA <- my_data %>% filter(geno == "A/A")
+
+AG <- my_data %>% filter(geno == "A/G")
+
+GG <- my_data %>% filter(geno == "G/G")
+```
+
+>Q13: Read this file into R and determine the sample size for each genotype and their corresponding median expression levels for each of these genotypes.
+
+The A/A genotype has `r nrow(AA)` samples with a median expression of `r median(AA$exp)`. The A/G genotype has `r nrow(AG)` samples with a median expression of `r median(AG$exp)`.The G/G genotype has `r nrow(GG)` samples with a median expression of `r median(GG$exp)`.
+
+>Q14: Generate a boxplot with a box per genotype, what could you infer from the relative expression value between A/A and G/G displayed in this plot? Does the SNP effect the expression of ORMDL3?
+
+```{r}
+my_plot <- ggplot(my_data) + 
+  aes(x = geno, y = exp,
+      fill = geno) +
+  geom_boxplot() +
+  labs(x = "genotype", y = "expression") +
+  theme_minimal() +
+  theme(legend.position = "FALSE")
+my_plot
+```
+The SNP does effect expression levels with A/A showing the highest expression. Between AA and GG there is about a 12 point decrease in expression. These results indicate that the SNP allele of ORMDL3 can cause a change in expression levels of the protein product wich can lead to and increased risk of childhood asthma.  
